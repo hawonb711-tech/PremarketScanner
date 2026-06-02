@@ -1,0 +1,11 @@
+node_modules
+dist
+dist-ssr
+release
+*.local
+.DS_Store
+
+# 환경변수 / 비밀키
+.env
+server/.env
+*.tsbuildinfo

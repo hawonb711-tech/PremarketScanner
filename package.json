@@ -1,0 +1,90 @@
+{
+  "name": "premarket-scanner",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "미국 프리마켓 급등주 스캐너 + 급등 이유(뉴스/이슈) 자동 요약",
+  "author": "Premarket Scanner",
+  "main": "electron/main.mjs",
+  "scripts": {
+    "dev": "vite",
+    "server": "node server/index.mjs",
+    "dev:all": "concurrently -n server,web -c green,cyan \"npm:server\" \"npm:dev\"",
+    "build:web": "tsc -b && vite build",
+    "build": "npm run build:web",
+    "preview": "vite preview",
+    "electron:dev": "npm run build:web && electron .",
+    "build:mac": "npm run build:web && electron-builder --mac dmg",
+    "build:mac:dir": "npm run build:web && electron-builder --mac dir"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.7",
+    "express": "^4.21.2",
+    "openai": "^4.77.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "@types/react": "^18.3.12",
+    "@types/react-dom": "^18.3.1",
+    "@vitejs/plugin-react": "^4.3.4",
+    "concurrently": "^9.1.0",
+    "electron": "^35.0.0",
+    "electron-builder": "^25.1.8",
+    "typescript": "^5.6.3",
+    "vite": "^6.0.3"
+  },
+  "build": {
+    "appId": "com.premarketscanner.app",
+    "productName": "프리마켓 급등주 스캐너",
+    "copyright": "Copyright © 2026",
+    "directories": {
+      "output": "release",
+      "buildResources": "build"
+    },
+    "files": [
+      "dist/**/*",
+      "server/**/*",
+      "electron/**/*",
+      "package.json",
+      "node_modules/**/*"
+    ],
+    "asar": true,
+    "mac": {
+      "category": "public.app-category.finance",
+      "target": [
+        {
+          "target": "dmg",
+          "arch": ["arm64", "x64"]
+        }
+      ],
+      "icon": "build/icon.png",
+      "artifactName": "PremarketScanner-${version}-mac.${ext}",
+      "hardenedRuntime": true,
+      "gatekeeperAssess": false,
+      "entitlements": "build/entitlements.mac.plist",
+      "entitlementsInherit": "build/entitlements.mac.plist"
+    },
+    "dmg": {
+      "title": "프리마켓 급등주 스캐너 설치",
+      "iconSize": 80,
+      "window": {
+        "width": 540,
+        "height": 380
+      },
+      "contents": [
+        {
+          "x": 140,
+          "y": 200
+        },
+        {
+          "x": 400,
+          "y": 200,
+          "type": "link",
+          "path": "/Applications"
+        }
+      ]
+    }
+  }
+}
