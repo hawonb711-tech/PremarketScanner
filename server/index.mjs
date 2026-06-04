@@ -8,7 +8,7 @@ import OpenAI from "openai";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
-/** 패키징된 Mac 앱: ~/Library/Application Support/PremarketScanner/.env */
+/** 패키징된 데스크톱 앱: %APPDATA%/프리마켓 급등주 스캐너/.env (Win) 등 */
 function loadEnv() {
   const userEnvDir = process.env.PMS_ENV_DIR;
   if (userEnvDir) {
@@ -26,14 +26,27 @@ function loadEnv() {
 
 loadEnv();
 
-import { UNIVERSE } from "./universe.mjs";
-import { fetchPremarketQuote, fetchAvgDailyVolume, mapPool } from "./prices.mjs";
+import { UNIVERSE, sectorOf, sectorLabel } from "./universe.mjs";
+import {
+  fetchPremarketQuote,
+  fetchAvgDailyVolume,
+  fetchTechnicals,
+  fetchMarketRegime,
+  fetchGapHistory,
+  mapPool,
+} from "./prices.mjs";
 import {
   issueResearchPrompt,
   issueStructurePrompt,
   ISSUE_SCHEMA,
   VALID_CATEGORIES,
 } from "./premarket.mjs";
+import {
+  deepDivePrompt,
+  deepDiveStructurePrompt,
+  DEEP_DIVE_SCHEMA,
+  VALID_RELATION,
+} from "./deepdive.mjs";
 
 function getClient(req) {
   const key =
@@ -126,11 +139,29 @@ export function createApp({ staticDir } = {}) {
     const limit = Math.min(Number(b.limit) || 25, 40);
 
     try {
+      // 시장 레짐(SPY/QQQ/VIX)은 1회만 조회 (병렬)
+      const regimePromise = fetchMarketRegime();
+
       const quotes = await mapPool(UNIVERSE, 12, async (u) => {
         const q = await fetchPremarketQuote(u.symbol);
         if (!q) return null;
         return { ...q, name: u.name || q.name, tier: u.tier };
       });
+
+      // 섹터 브레드스: 유니버스 전체에서 섹터별 (상승 종목 / 데이터 보유 종목)
+      const breadthAgg = {};
+      for (const q of quotes) {
+        if (!q) continue;
+        const sk = sectorOf(q.symbol);
+        if (!sk) continue;
+        const a = (breadthAgg[sk] ||= { up: 0, total: 0 });
+        a.total += 1;
+        if (q.changePct != null && q.changePct > 0) a.up += 1;
+      }
+      const breadthOf = (sk) => {
+        const a = sk && breadthAgg[sk];
+        return a && a.total >= 3 ? Math.round((a.up / a.total) * 100) : null;
+      };
 
       let gainers = quotes
         .filter(Boolean)
@@ -142,16 +173,27 @@ export function createApp({ staticDir } = {}) {
       gainers.sort((a, b2) => b2.changePct - a.changePct);
       gainers = gainers.slice(0, limit);
 
+      // 상위 종목만 평균 거래량 + 기술 지표 + 과거 갭 베이스레이트 보강
       await mapPool(gainers, 8, async (g) => {
-        const avg = await fetchAvgDailyVolume(g.symbol);
+        const [avg, tech, gapHist] = await Promise.all([
+          fetchAvgDailyVolume(g.symbol),
+          fetchTechnicals(g.symbol),
+          fetchGapHistory(g.symbol, g.gapPct ?? g.changePct),
+        ]);
         g.avgVolume = avg;
         g.volumeRatio = avg && avg > 0 ? g.volume / avg : null;
+        g.tech = tech;
+        g.gapHistory = gapHist;
       });
+
+      const regime = await regimePromise;
 
       const rows = gainers.map((g) => ({
         symbol: g.symbol,
         name: g.name,
         exchange: g.exchange,
+        sector: sectorLabel(g.symbol),
+        sectorKey: sectorOf(g.symbol),
         tier: g.tier,
         session: g.session,
         prevClose: round(g.prevClose),
@@ -161,18 +203,32 @@ export function createApp({ staticDir } = {}) {
         preMarketChangePct: round(g.preMarketChangePct, 1),
         preMarketHigh: round(g.preMarketHigh),
         sessionHigh: round(g.sessionHigh),
+        sessionLow: round(g.sessionLow),
         fromHighPct: round(g.fromHighPct, 1),
         regularOpen: round(g.regularOpen),
         fromOpenPct: round(g.fromOpenPct, 1),
+        gapPct: round(g.gapPct, 1),
         volume: g.volume,
         avgVolume: g.avgVolume ? Math.round(g.avgVolume) : null,
         volumeRatio: round(g.volumeRatio, 2),
+        vwap: round(g.vwap),
+        vwapDeltaPct: round(g.vwapDeltaPct, 1),
+        fiftyTwoHigh: round(g.fiftyTwoHigh),
+        fiftyTwoLow: round(g.fiftyTwoLow),
+        from52HighPct: round(g.from52HighPct, 1),
+        atrPct: g.tech?.atrPct ?? null,
+        aboveVwap: g.vwapDeltaPct != null ? g.vwapDeltaPct >= 0 : null,
+        ret5: g.tech?.ret5 ?? null,
+        ret20: g.tech?.ret20 ?? null,
+        breadthPct: breadthOf(sectorOf(g.symbol)),
+        gapHistory: g.gapHistory ?? null,
       }));
 
       res.json({
         asOf: new Date().toISOString(),
         universeSize: UNIVERSE.length,
         filters: { minChangePct, minPrice, minVolume, excludeMid },
+        regime,
         count: rows.length,
         rows,
       });
@@ -212,9 +268,14 @@ export function createApp({ staticDir } = {}) {
 
     try {
       const groups = chunk(items, 6);
-      const results = await Promise.all(
+      // 일부 청크가 실패해도 나머지는 살린다 (부분 성공 허용).
+      const settled = await Promise.allSettled(
         groups.map((g) => processIssueChunk(client, model, isReasoning, g))
       );
+      const results = settled
+        .filter((s) => s.status === "fulfilled")
+        .map((s) => s.value);
+      const failed = settled.filter((s) => s.status === "rejected").length;
 
       const allSources = new Set();
       const bySymbol = {};
@@ -248,11 +309,118 @@ export function createApp({ staticDir } = {}) {
         }
       }
 
-      res.json({ issues: bySymbol, allSources: [...allSources] });
+      res.json({
+        issues: bySymbol,
+        allSources: [...allSources],
+        chunksFailed: failed,
+        chunksTotal: groups.length,
+      });
     } catch (err) {
       const msg = err?.message || String(err);
       console.error("[/api/premarket-issues]", msg);
       res.status(500).json({ error: `이슈 분석 실패: ${msg}` });
+    }
+  });
+
+  // ===== 심층 분석: 단일 종목 (웹검색, OpenAI 키 필요) =====
+  app.post("/api/deep-dive", async (req, res) => {
+    const client = getClient(req);
+    if (!client) {
+      return res.status(400).json({
+        error:
+          "OpenAI API 키가 없습니다. ⚙️ 설정에서 키를 입력하거나, 환경설정 파일에 OPENAI_API_KEY를 넣으세요.",
+      });
+    }
+
+    const s = req.body?.stock || {};
+    const symbol = String(s.symbol ?? "").trim().toUpperCase();
+    if (!symbol) return res.status(400).json({ error: "stock.symbol이 필요합니다." });
+    const stock = {
+      symbol,
+      name: String(s.name ?? symbol).trim(),
+      price: Number(s.price) || null,
+      changePct: Number(s.changePct) || null,
+      fromHighPct: s.fromHighPct ?? null,
+      vwapDeltaPct: s.vwapDeltaPct ?? null,
+      atrPct: s.atrPct ?? null,
+      from52HighPct: s.from52HighPct ?? null,
+      // 정량 예측 컨텍스트 (클라이언트가 전달)
+      continuationScore: s.continuationScore ?? null,
+      continuationLabel: s.continuationLabel ?? null,
+      gapHistory: s.gapHistory ?? null,
+      regime: s.regime ?? null,
+      breadthPct: s.breadthPct ?? null,
+    };
+    const model = req.body?.model || "gpt-5.5";
+    const isReasoning = /^(gpt-5|o\d)/i.test(model);
+
+    try {
+      const research = await client.responses.create({
+        model,
+        tools: [{ type: "web_search" }],
+        ...(isReasoning ? { reasoning: { effort: "medium" } } : {}),
+        input: deepDivePrompt(stock),
+      });
+      const researchText = research.output_text || "";
+      const sources = collectSources(research);
+
+      const structured = await client.responses.create({
+        model,
+        ...(isReasoning ? { reasoning: { effort: "low" } } : {}),
+        input: deepDiveStructurePrompt(stock, researchText, sources),
+        text: {
+          format: {
+            type: "json_schema",
+            name: "DeepDive",
+            strict: true,
+            schema: DEEP_DIVE_SCHEMA,
+          },
+        },
+      });
+
+      let parsed;
+      try {
+        parsed = JSON.parse(structured.output_text || "{}");
+      } catch {
+        return res
+          .status(502)
+          .json({ error: "심층 분석 응답을 JSON으로 해석하지 못했습니다." });
+      }
+
+      const allowed = new Set(sources);
+      const related = Array.isArray(parsed?.related)
+        ? parsed.related
+            .map((r) => ({
+              symbol: String(r?.symbol ?? "").trim().toUpperCase(),
+              name: String(r?.name ?? "").trim(),
+              relation: VALID_RELATION.includes(r?.relation) ? r.relation : "peer",
+              reason: String(r?.reason ?? "").trim(),
+            }))
+            .filter((r) => r.symbol)
+            .slice(0, 8)
+        : [];
+      const cf = Number(parsed?.confidence);
+
+      res.json({
+        symbol,
+        oneLiner: String(parsed?.oneLiner ?? "").trim(),
+        sector: String(parsed?.sector ?? "").trim(),
+        catalyst: String(parsed?.catalyst ?? "").trim(),
+        timeline: Array.isArray(parsed?.timeline) ? parsed.timeline.slice(0, 6) : [],
+        bullCase: Array.isArray(parsed?.bullCase) ? parsed.bullCase.slice(0, 5) : [],
+        bearCase: Array.isArray(parsed?.bearCase) ? parsed.bearCase.slice(0, 5) : [],
+        levels: Array.isArray(parsed?.levels) ? parsed.levels.slice(0, 8) : [],
+        related,
+        comment: String(parsed?.comment ?? "").trim(),
+        confidence: Number.isFinite(cf) ? Math.min(5, Math.max(0, cf)) : 0,
+        sources: Array.isArray(parsed?.sources)
+          ? parsed.sources.filter((u) => typeof u === "string" && allowed.has(u))
+          : [],
+      });
+    } catch (err) {
+      const msg = err?.message || String(err);
+      console.error("[/api/deep-dive]", msg);
+      res.status(500).json({ error: `심층 분석 실패: ${msg}` });
     }
   });
 
@@ -273,7 +441,7 @@ export function startServer({ port, staticDir, host = "127.0.0.1" } = {}) {
   const app = createApp({ staticDir });
   return new Promise((resolve, reject) => {
     const server = app.listen(listenPort, host, () => {
-      console.log(`✅ 프리마켓 스캐너: http://${host}:${listenPort}`);
+      console.log(`프리마켓 스캐너: http://${host}:${listenPort}`);
       if (!process.env.OPENAI_API_KEY) {
         console.log(
           "ℹ️  OPENAI_API_KEY 없음 — 가격 스캔은 가능, '이유 분석'은 키 필요"

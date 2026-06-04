@@ -21,44 +21,45 @@
 - **가격/거래량**: Yahoo Finance 무료 차트 API (프리/정규/애프터 포함). **API 키 불필요.**
 - **급등 사유/뉴스**: OpenAI Responses API의 `web_search` (2-패스: 조사 → 구조화). 이 기능만 OpenAI 키가 필요합니다.
 
-## Mac 원클릭 설치 (DMG)
+## Windows 원클릭 설치 (.exe)
 
-Node.js 없이 **앱 더블클릭**만으로 실행됩니다. 내장 서버 + UI가 한 번에 뜹니다.
+Node.js 없이 **설치 파일 더블클릭**만으로 실행됩니다. 내장 서버 + UI가 한 번에 뜹니다.
 
 ### 사용자: 설치 방법
 
-1. `PremarketScanner-0.1.0-mac.dmg` 파일을 더블클릭
-2. 앱 아이콘을 **Applications(응용 프로그램)** 폴더로 드래그
-3. Launchpad에서 **「프리마켓 급등주 스캐너」** 실행
+1. `PremarketScanner-0.1.0-win-x64.exe` (설치형) 또는 `PremarketScanner-0.1.0-portable.exe` (무설치) 다운로드
+2. **설치형**: 더블클릭 → 설치 위치 선택 → 바탕화면/시작 메뉴 바로가기 생성
+   **무설치(portable)**: 더블클릭하면 바로 실행
+3. 시작 메뉴 또는 바탕화면의 **「프리마켓 급등주 스캐너」** 실행
 
-> 처음 실행 시 macOS가 "확인되지 않은 개발자" 경고를 띄울 수 있습니다.  
-> **시스템 설정 → 개인정보 보호 및 보안 → 그래도 열기** 를 누르면 됩니다.
+> 처음 실행 시 Windows SmartScreen이 "Windows의 PC 보호" 경고를 띄울 수 있습니다.  
+> **추가 정보 → 실행** 을 누르면 됩니다. (서명되지 않은 앱이라 정상입니다.)
 
 OpenAI 키 설정 (이유 분석용, 선택):
 - 앱 내 **⚙️ 설정**에서 입력 (권장), 또는
-- `~/Library/Application Support/프리마켓 급등주 스캐너/.env` 에 `OPENAI_API_KEY=sk-...` 추가
+- `%APPDATA%\프리마켓 급등주 스캐너\.env` 에 `OPENAI_API_KEY=sk-...` 추가
 
-### 개발자: DMG 빌드 (Mac 필요)
+### 개발자: 설치 파일 빌드 (Windows 필요)
 
-```bash
-# Mac에서 한 줄 빌드
-chmod +x scripts/build-mac.sh
-./scripts/build-mac.sh
-# → release/PremarketScanner-0.1.0-mac.dmg 생성
+```powershell
+# 한 줄 빌드 (PowerShell)
+powershell -ExecutionPolicy Bypass -File scripts\build-win.ps1
+# → release\PremarketScanner-0.1.0-win-x64.exe (설치형)
+# → release\PremarketScanner-0.1.0-portable.exe (무설치)
 ```
 
 또는:
 
-```bash
+```powershell
 npm install
-npm run build:mac
+npm run build:win
 ```
 
-GitHub Actions로 빌드하려면 **Actions → Build Mac DMG → Run workflow** 후 Artifacts에서 DMG를 받습니다.
+GitHub Actions로 빌드하려면 **Actions → Build Windows Installer → Run workflow** 후 Artifacts에서 `.exe`를 받습니다.
 
 로컬에서 Electron 앱 테스트:
 
-```bash
+```powershell
 npm run electron:dev
 ```
 
@@ -115,14 +116,21 @@ src/
   premarket.ts    # 타입, API 호출, 위험도/등급 점수 로직
   styles.css      # 다크 테마
 electron/
-  main.mjs        # Mac 앱: 내장 서버 기동 + 창 열기
+  main.mjs        # 데스크톱 앱: 내장 서버 기동 + 창 열기
 build/
-  icon.png        # 앱/DMG 아이콘
-  entitlements.mac.plist
+  icon.png        # 앱/설치 파일 아이콘
 scripts/
-  build-mac.sh    # Mac DMG 원클릭 빌드 스크립트
-release/          # 빌드 결과 (.dmg, .app)
+  build-win.ps1   # Windows 설치 파일 원클릭 빌드 스크립트
+release/          # 빌드 결과 (.exe)
 ```
+
+## ChatGPT 단타 코치 (시스템 프롬프트)
+
+스캐너 결과를 ChatGPT에 붙여 **단타 관점 해석**을 받으려면:
+
+- **파일**: [`docs/CHATGPT_DAYTRADING_SYSTEM_PROMPT.md`](docs/CHATGPT_DAYTRADING_SYSTEM_PROMPT.md) (약 15만 자)
+- **방법**: 문서 안 `▼▼▼ 복사 시작 ▼▼▼` ~ `▲▲▲ 복사 끝 ▲▲▲` 사이 **코드 블록 전체**를 ChatGPT Custom GPT / Project **Instructions**에 붙여넣기
+- **대화 시**: 스캐너 표·상세 패널 숫자를 프롬프트에 있는 INPUT FORMAT으로 붙여넣기
 
 ## 면책
 

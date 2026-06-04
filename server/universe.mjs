@@ -149,4 +149,63 @@ export const UNIVERSE = [
   { symbol: "SMH", name: "반도체 ETF", tier: "large" },
 ];
 
+// 섹터/테마 라벨 (심층 분석·관련주 묶음용). 심볼→섹터 매핑.
+export const SECTOR = {
+  semi: "반도체/AI 하드웨어",
+  software: "소프트웨어/클라우드",
+  internet: "인터넷/미디어",
+  fintech: "금융/핀테크",
+  health: "헬스케어/바이오",
+  consumer: "소비재/리테일",
+  industrial: "산업재/에너지/EV",
+  china: "중국 ADR",
+  etf: "ETF",
+  bigtech: "빅테크",
+};
+
+const SECTOR_BY_SYMBOL = {
+  AAPL: "bigtech", MSFT: "bigtech", GOOGL: "bigtech", AMZN: "bigtech",
+  META: "bigtech", NVDA: "semi", TSLA: "industrial", AVGO: "semi",
+  ORCL: "software", NFLX: "internet",
+  AMD: "semi", MRVL: "semi", QCOM: "semi", TXN: "semi", INTC: "semi",
+  MU: "semi", TSM: "semi", ASML: "semi", AMAT: "semi", LRCX: "semi",
+  KLAC: "semi", ARM: "semi", SMCI: "semi", DELL: "semi", HPE: "semi",
+  ON: "semi", MCHP: "semi", NXPI: "semi", ADI: "semi", WDC: "semi",
+  STX: "semi", VRT: "semi", ANET: "semi", CRDO: "semi", ALAB: "semi",
+  CRM: "software", ADBE: "software", NOW: "software", PLTR: "software",
+  SNOW: "software", PANW: "software", CRWD: "software", ZS: "software",
+  DDOG: "software", NET: "software", MDB: "software", SNPS: "software",
+  CDNS: "software", INTU: "software", WDAY: "software", TEAM: "software",
+  SHOP: "software", UBER: "internet", ABNB: "internet", APP: "software",
+  DIS: "internet", CMCSA: "internet", T: "internet", VZ: "internet",
+  SPOT: "internet", ROKU: "internet", PINS: "internet", SNAP: "internet",
+  RDDT: "internet", DASH: "internet",
+  V: "fintech", MA: "fintech", JPM: "fintech", BAC: "fintech",
+  WFC: "fintech", GS: "fintech", MS: "fintech", PYPL: "fintech",
+  SQ: "fintech", COIN: "fintech", HOOD: "fintech", SOFI: "fintech",
+  AFRM: "fintech",
+  LLY: "health", JNJ: "health", UNH: "health", ABBV: "health",
+  MRK: "health", PFE: "health", MRNA: "health", AMGN: "health",
+  GILD: "health", VRTX: "health", REGN: "health", BIIB: "health",
+  ISRG: "health",
+  WMT: "consumer", COST: "consumer", HD: "consumer", NKE: "consumer",
+  SBUX: "consumer", MCD: "consumer", TGT: "consumer", LULU: "consumer",
+  CMG: "consumer", KO: "consumer", PEP: "consumer",
+  BA: "industrial", GE: "industrial", CAT: "industrial", XOM: "industrial",
+  CVX: "industrial", RIVN: "industrial", LCID: "industrial", NIO: "china",
+  F: "industrial", GM: "industrial", ENPH: "industrial", FSLR: "industrial",
+  PLUG: "industrial", CCJ: "industrial", OKLO: "industrial",
+  BABA: "china", PDD: "china", JD: "china", BIDU: "china",
+  SPY: "etf", QQQ: "etf", SMH: "etf",
+};
+
+export function sectorOf(symbol) {
+  return SECTOR_BY_SYMBOL[symbol] || null;
+}
+
+export function sectorLabel(symbol) {
+  const s = SECTOR_BY_SYMBOL[symbol];
+  return s ? SECTOR[s] : "";
+}
+
 export const UNIVERSE_MAP = new Map(UNIVERSE.map((u) => [u.symbol, u]));
